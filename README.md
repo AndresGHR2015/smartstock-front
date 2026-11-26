@@ -23,11 +23,14 @@ Este repositorio mantiene la aplicación web, sus componentes y las operaciones 
 La ruta `/` consulta un producto por SKU y permite registrar una venta. La aplicación usa las operaciones del SDL en `vendor/smartstock-infra/contracts/graphql/schema.graphql`, fijado al commit `6237ae7a047c3a16077db5bdd51a6ee89f5f90f1`. Inicializa el submódulo con `git submodule update --init --recursive`. El contrato todavía no define operaciones GraphQL de reposición, por lo que no se incluye esa funcionalidad.
 
 ```sh
+(cd ../smartstock-infra && docker compose up --build -d gateway)
 npm ci
-VITE_GRAPHQL_URL=http://localhost:4000/graphql npm run dev
+npm run dev
 ```
 
-Abre `http://localhost:5173/`. El ejemplo requiere un endpoint GraphQL que permita el origen de Vite mediante CORS. Para probar con el Gateway actual, usa Docker Compose de `smartstock-infra`, que publica `/graphql` en el mismo origen que la aplicación. La URL se incorpora durante la compilación de la imagen.
+Abre `http://127.0.0.1:5173/`. Vite sirve la aplicación y reenvía `/graphql` al Gateway en `127.0.0.1:3001`. Si cambias el puerto del Gateway, define `GATEWAY_HTTP_PORT` con el mismo valor al ejecutar Compose y Vite. Tras arrancar los servicios, consulta `SKU-001` para comprobar la conexión.
+
+Con Docker Compose completo, Nginx sirve la aplicación y GraphQL en el mismo origen. Para usar un endpoint externo, define `VITE_GRAPHQL_URL` al iniciar Vite o al compilar la imagen y configura CORS en ese servidor si el navegador accede desde otro origen.
 
 ```sh
 npm test
