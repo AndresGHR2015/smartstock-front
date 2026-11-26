@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import App from './App';
 import type { Product, Sale } from './api';
 import { analyzeNeed, readDemo, saveDemo, seedDemo } from './demo';
@@ -48,9 +48,9 @@ export default function Workspace() {
     if (demoMode) saveDemo(demo);
   }, [demo, demoMode]);
 
-  function rememberProduct(product: Product) {
+  const rememberProduct = useCallback((product: Product) => {
     setObserved((items) => [product, ...items.filter((item) => item.sku !== product.sku)]);
-  }
+  }, []);
 
   function rememberSale(sale: Sale) {
     const at = Date.now();
@@ -72,7 +72,7 @@ export default function Workspace() {
   let content;
   switch (route.view) {
     case 'dashboard':
-      content = <Dashboard demo={demoMode ? demo : null} observed={observed} observedSales={observedSales} onAnalyze={analyze} />;
+      content = <Dashboard demo={demoMode ? demo : null} onAnalyze={analyze} />;
       break;
     case 'inventario':
       content = <Inventory demo={demoMode ? demo : null} observed={observed} detail={route.detail} onProduct={rememberProduct} />;

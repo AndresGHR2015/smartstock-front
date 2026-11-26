@@ -24,7 +24,7 @@ El Dashboard es la entrada. La navegación da acceso a Inventario, Ventas, Compr
 
 El enlace **Abrir demo** carga el escenario de ejemplo (`/?modo=demo`). Ahí se puede simular una venta, analizar la reposición, crear y aprobar una orden y registrar su recepción. **Reiniciar demo** vuelve al punto anterior a la venta. El escenario se guarda por pestaña y sus acciones modifican únicamente datos de ejemplo.
 
-La aplicación usa el SDL de `vendor/smartstock-infra/contracts/graphql/schema.graphql`, fijado al commit `6237ae7a047c3a16077db5bdd51a6ee89f5f90f1`. Inicializa el submódulo con `git submodule update --init --recursive`.
+La aplicación usa el SDL de `vendor/smartstock-infra/contracts/graphql/schema.graphql`, fijado al commit `9336529e839c465e1a28bc9976df7a177068ca94`. Inicializa el submódulo con `git submodule update --init --recursive`.
 
 ```sh
 (cd ../smartstock-infra && docker compose up --build -d gateway)

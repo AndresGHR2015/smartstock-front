@@ -1,5 +1,5 @@
-import { useState, type FormEvent } from 'react';
-import { getProduct, type Product, type Sale } from './api';
+import { useEffect, useState, type FormEvent } from 'react';
+import { getDashboard, getProduct, type DashboardSnapshot, type Product, type Sale } from './api';
 import { addSale, coverage, decimalText, incoming, needStatus, numberText, stockStatus, timeText,
   type Activity, type DemoState, type StockItem, type StockStatus } from './demo';
 import { Empty, href, needLabels, PageHeading, StockBadge, stockLabels, TableFrame } from './panel-ui';
@@ -16,15 +16,20 @@ function coverageText(product: Product) {
   return days === null ? '—' : decimalText(days) + ' días';
 }
 
-function RecentActivity({ activity }: { activity: Activity[] }) {
-  if (!activity.length) return <Empty>Las ventas confirmadas en esta sesión aparecerán aquí.</Empty>;
+const activityTime = new Intl.DateTimeFormat('es-CL', {
+  day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
+  hourCycle: 'h23', timeZone: 'America/Santiago',
+});
+
+function RecentActivity({ activity, showDate }: { activity: Activity[]; showDate: boolean }) {
+  if (!activity.length) return <Empty>No hay actividad reciente.</Empty>;
 
   return (
     <ol className="timeline">
       {activity.slice(0, 5).map((event, index) => (
         <li key={event.at + '-' + index}>
           <span className={'timeline-dot event-' + event.kind} aria-hidden="true" />
-          <time dateTime={new Date(event.at).toISOString()}>{timeText(event.at)}</time>
+          <time dateTime={new Date(event.at).toISOString()}>{showDate ? activityTime.format(event.at) : timeText(event.at)}</time>
           <div><strong>{event.title}</strong><p>{event.detail}</p></div>
         </li>
       ))}
@@ -32,40 +37,71 @@ function RecentActivity({ activity }: { activity: Activity[] }) {
   );
 }
 
-export function Dashboard({ demo, observed, observedSales, onAnalyze }: {
-  demo: DemoState | null; observed: Product[]; observedSales: ObservedSale[]; onAnalyze: (needId: string) => void;
+const liveNeedLabels = { PENDING: 'Pendiente de análisis', DRAFT: 'Borrador', APPROVED: 'Aprobada' };
+const liveNeedStyles = { PENDING: 'pending', DRAFT: 'draft', APPROVED: 'ordered' };
+
+export function Dashboard({ demo, onAnalyze }: {
+  demo: DemoState | null; onAnalyze: (needId: string) => void;
 }) {
-  const products = demo?.products ?? observed;
+  const [state, setState] = useState<{ snapshot?: DashboardSnapshot; loading: boolean }>({ loading: true });
+  const [attempt, setAttempt] = useState(0);
+  const live = demo === null;
+  useEffect(() => {
+    if (!live) return;
+    const controller = new AbortController();
+    getDashboard(controller.signal).then(
+      (snapshot) => { if (!controller.signal.aborted) setState({ snapshot, loading: false }); },
+      () => { if (!controller.signal.aborted) setState({ loading: false }); },
+    );
+    return () => controller.abort();
+  }, [live, attempt]);
+
+  const inventory = state.snapshot?.inventoryOverview;
+  const sales = state.snapshot?.salesOverview;
+  const purchases = state.snapshot?.purchasesOverview;
+  const loading = live && state.loading;
+  const unavailable = live && !loading && !(inventory && sales && purchases);
+  const products = demo?.products ?? inventory?.attention ?? [];
   const byPriority = { critical: 0, low: 1, normal: 2 };
-  const attention = [...products].sort((a, b) => byPriority[stockStatus(a)] - byPriority[stockStatus(b)]).slice(0, 4);
+  const attention = demo
+    ? [...products].sort((a, b) => byPriority[stockStatus(a)] - byPriority[stockStatus(b)]).slice(0, 4)
+    : products;
   const pending = demo?.needs.filter((need) => needStatus(demo.orders, need.id) !== 'resolved') ?? [];
-  const criticalCount = products.filter((product) => stockStatus(product) === 'critical').length;
-  const openCount = demo?.orders.filter((order) => ['draft', 'ordered'].includes(order.status)).length ?? 0;
+  const criticalCount = demo ? products.filter((product) => stockStatus(product) === 'critical').length : inventory?.criticalCount;
+  const pendingCount = demo ? pending.length : purchases?.pendingCount;
+  const openCount = demo ? demo.orders.filter((order) => ['draft', 'ordered'].includes(order.status)).length : purchases?.openOrderCount;
   const today = new Date().toDateString();
-  const salesToday = demo?.sales.map((sale) => ({ units: sale.units, at: sale.at }))
-    ?? observedSales.map(({ sale, at }) => ({ units: sale.quantity, at }));
-  const soldToday = salesToday.reduce((total, sale) =>
-    total + (new Date(sale.at).toDateString() === today ? sale.units : 0), 0);
-  const activity = demo?.activity ?? observedSales.map(({ sale, at }) => ({
-    kind: 'sale' as const, title: 'Venta confirmada', detail: sale.quantity + ' × ' + productName(products, sale.sku), at,
-  }));
+  const soldToday = demo ? demo.sales.reduce((total, sale) =>
+    total + (new Date(sale.at).toDateString() === today ? sale.units : 0), 0) : sales?.unitsToday;
+  const activity = demo?.activity ?? sales?.recent.map((sale) => ({
+    kind: 'sale' as const, title: 'Venta confirmada',
+    detail: sale.quantity + ' × ' + productName(products, sale.sku), at: Date.parse(sale.createdAt),
+  })) ?? [];
   const metrics = [
     { label: 'Stock crítico', value: criticalCount,
-      unit: demo ? criticalCount === 1 ? 'producto' : 'productos' : 'SKU consultados', known: !!demo || products.length > 0, tone: 'critical' },
+      unit: criticalCount === 1 ? 'producto' : 'productos', tone: 'critical' },
     { label: 'Ventas hoy', value: soldToday,
-      unit: demo ? soldToday === 1 ? 'unidad' : 'unidades' : 'unidades en esta sesión', known: !!demo || observedSales.length > 0, tone: 'sales' },
-    { label: 'Reposición pendiente', value: pending.length, unit: pending.length === 1 ? 'necesidad' : 'necesidades', known: !!demo, tone: 'pending' },
-    { label: 'Órdenes abiertas', value: openCount, unit: openCount === 1 ? 'orden' : 'órdenes', known: !!demo, tone: 'orders' },
+      unit: soldToday === 1 ? 'unidad' : 'unidades', tone: 'sales' },
+    { label: 'Reposición pendiente', value: pendingCount, unit: pendingCount === 1 ? 'necesidad' : 'necesidades', tone: 'pending' },
+    { label: 'Órdenes abiertas', value: openCount, unit: openCount === 1 ? 'orden' : 'órdenes', tone: 'orders' },
   ];
 
   return <>
     <PageHeading title="Buenos días" summary="Esto es lo que está ocurriendo con tu inventario.">
       <a className="workspace-button primary-action" href={href('ventas')}>Registrar venta</a>
     </PageHeading>
+    {loading && <p role="status">Consultando datos de los servicios…</p>}
+    {unavailable && <div className="surface-actions">
+      <p role="status">Algunos datos del Dashboard no están disponibles.</p>
+      <button className="workspace-button subtle-action" onClick={() => {
+        setState((current) => ({ ...current, loading: true }));
+        setAttempt((current) => current + 1);
+      }}>Volver a consultar</button>
+    </div>}
     <dl className="metric-grid">
       {metrics.map((metric) => <div className={'metric metric-' + metric.tone} key={metric.label}>
         <dt>{metric.label}</dt>
-        <dd><strong>{metric.known ? numberText(metric.value) : '—'}</strong><span>{metric.known ? metric.unit : 'Sin datos disponibles'}</span></dd>
+        <dd><strong>{metric.value === undefined ? '—' : numberText(metric.value)}</strong><span>{metric.value === undefined ? 'Sin datos disponibles' : metric.unit}</span></dd>
       </div>)}
     </dl>
     <div className="dashboard-grid">
@@ -76,25 +112,27 @@ export function Dashboard({ demo, observed, observedSales, onAnalyze }: {
         </div>
         {attention.length ? (
           <TableFrame label="Productos que requieren atención">
-            <table className="data-table"><thead><tr><th>Producto</th><th className="numeric">Stock</th><th className="numeric">Umbral</th><th>Cobertura</th><th>Estado</th></tr></thead>
+            <table className="data-table"><thead><tr><th>Producto</th><th className="numeric">Stock</th><th className="numeric">Umbral</th>{demo && <th>Cobertura</th>}<th>Estado</th></tr></thead>
               <tbody>{attention.map((product) => <tr key={product.sku}>
                 <td><a className="entity-link" href={href('inventario', product.sku)}>{product.name}</a><span className="table-detail">{product.sku}</span></td>
                 <td className="numeric emphasized">{numberText(product.stock)}</td>
                 <td className="numeric">{numberText(product.threshold)}</td>
-                <td>{coverageText(product)}</td>
+                {demo && <td>{coverageText(product)}</td>}
                 <td><StockBadge product={product} /></td>
               </tr>)}</tbody>
             </table>
           </TableFrame>
-        ) : <Empty>Consulta un SKU en Inventario para ver su disponibilidad aquí.</Empty>}
+        ) : <Empty>{demo || inventory ? 'No hay productos con stock crítico o bajo.'
+          : loading ? 'Consultando Inventario…' : 'Inventario no disponible.'}</Empty>}
       </section>
       <section className="surface activity-panel" aria-labelledby="activity-title">
         <div className="surface-heading"><h2 id="activity-title">Actividad reciente</h2></div>
-        <RecentActivity activity={activity} />
+        {demo || sales ? <RecentActivity activity={activity} showDate={live} />
+          : <Empty>{loading ? 'Consultando Ventas…' : 'Ventas no disponible.'}</Empty>}
       </section>
     </div>
     <section className="surface dashboard-needs" aria-labelledby="needs-summary">
-      <div className="surface-heading"><h2 id="needs-summary">Necesidades de reposición</h2><a className="text-link" href={href('compras')}>Ir a Compras</a></div>
+      <div className="surface-heading"><h2 id="needs-summary">Necesidades de reposición</h2>{demo && <a className="text-link" href={href('compras')}>Ir a Compras</a>}</div>
       {demo ? pending.length ? (
         <TableFrame label="Necesidades pendientes">
           <table className="data-table"><thead><tr><th>Producto</th><th>SKU</th><th>Detectada</th><th>Estado</th><th>Acción</th></tr></thead>
@@ -113,7 +151,18 @@ export function Dashboard({ demo, observed, observedSales, onAnalyze }: {
           </table>
         </TableFrame>
       ) : <Empty>No quedan necesidades abiertas.</Empty>
-        : <Empty>El resumen de necesidades está disponible en el modo demo.</Empty>}
+        : purchases?.needs.length ? (
+          <TableFrame label="Necesidades recientes">
+            <table className="data-table live-needs"><thead><tr><th>SKU</th><th>Detectada</th><th>Estado</th></tr></thead>
+              <tbody>{purchases.needs.map((need) => <tr key={need.eventId}>
+                <td><a className="entity-link" href={href('inventario', need.sku)}>{need.sku}</a></td>
+                <td><time dateTime={need.occurredAt}>{activityTime.format(Date.parse(need.occurredAt))}</time></td>
+                <td><span className={'badge ' + liveNeedStyles[need.status]}>{liveNeedLabels[need.status]}</span></td>
+              </tr>)}</tbody>
+            </table>
+          </TableFrame>
+        ) : <Empty>{purchases ? 'No quedan necesidades abiertas.'
+          : loading ? 'Consultando Compras…' : 'Compras no disponible.'}</Empty>}
     </section>
   </>;
 }
@@ -125,8 +174,25 @@ export function Inventory({ demo, observed, detail, onProduct }: {
   const [filter, setFilter] = useState<StockStatus | 'all'>('all');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
+  const [detailError, setDetailError] = useState<{ sku: string; message: string }>();
   const products = demo?.products ?? observed;
   const selected = products.find((product) => product.sku === detail);
+  useEffect(() => {
+    if (!detail || demo || selected) return;
+    const controller = new AbortController();
+    setDetailError(undefined);
+    getProduct(detail, controller.signal).then(
+      (product) => {
+        if (controller.signal.aborted) return;
+        if (product) onProduct(product);
+        else setDetailError({ sku: detail, message: 'No se encontró ese SKU.' });
+      },
+      () => {
+        if (!controller.signal.aborted) setDetailError({ sku: detail, message: 'No se pudo consultar el inventario.' });
+      },
+    );
+    return () => controller.abort();
+  }, [demo, detail, selected, onProduct]);
   const matching = products.filter((product) => {
     const statusMatches = filter === 'all' || stockStatus(product) === filter;
     const query = demo ? search.trim().toLocaleLowerCase('es-CL') : '';
@@ -178,6 +244,11 @@ export function Inventory({ demo, observed, detail, onProduct }: {
       </section>
     </>;
   }
+  if (!demo && detail) return <>
+    <a className="back-link" href={href('inventario')}>Volver a Inventario</a>
+    <PageHeading title="Inventario" summary={detail} />
+    <p role="status">{detailError?.sku === detail ? detailError.message : 'Consultando disponibilidad…'}</p>
+  </>;
   const searchField = <input id="inventory-search" value={search} onChange={(event) => setSearch(event.target.value)}
     placeholder={demo ? 'Buscar producto o SKU' : 'Introduce un SKU'} autoComplete="off" />;
   return <>

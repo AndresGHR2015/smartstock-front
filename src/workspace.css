@@ -608,6 +608,6 @@ button.filter-button[aria-pressed="true"] { background: #e0edf8; border-color: #
   .attention-panel :is(th, td), .dashboard-needs :is(th, td) { padding-inline: 6px; }
   .attention-panel :is(th, td):first-child, .dashboard-needs :is(th, td):first-child { padding-left: 10px; }
   .attention-panel :is(th, td):last-child, .dashboard-needs :is(th, td):last-child { padding-right: 10px; }
-  .dashboard-needs :is(th, td):nth-child(2), .dashboard-needs :is(th, td):nth-child(3) { display: none; }
+  .dashboard-needs .data-table:not(.live-needs) :is(th, td):is(:nth-child(2), :nth-child(3)) { display: none; }
   .dashboard-needs .data-table .workspace-button { min-height: 38px; white-space: normal; }
 }
