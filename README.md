@@ -20,7 +20,11 @@ Este repositorio mantiene la aplicación web, sus componentes y las operaciones 
 
 ### Primer corte
 
-La ruta `/` consulta un producto por SKU y permite registrar una venta. La aplicación usa las operaciones del SDL en `vendor/smartstock-infra/contracts/graphql/schema.graphql`, fijado al commit `6237ae7a047c3a16077db5bdd51a6ee89f5f90f1`. Inicializa el submódulo con `git submodule update --init --recursive`. El contrato todavía no define operaciones GraphQL de reposición, por lo que no se incluye esa funcionalidad.
+El Dashboard es la entrada. La navegación da acceso a Inventario, Ventas, Compras y Reposición IA. El Gateway actual permite consultar existencias por SKU, registrar ventas y consultar su estado mediante el ID de venta. El Dashboard y las tablas reales muestran las consultas y confirmaciones observadas en la sesión.
+
+El enlace **Abrir demo** carga el escenario de ejemplo (`/?modo=demo`). Ahí se puede simular una venta, analizar la reposición, crear y aprobar una orden y registrar su recepción. **Reiniciar demo** vuelve al punto anterior a la venta. El escenario se guarda por pestaña y sus acciones modifican únicamente datos de ejemplo.
+
+La aplicación usa el SDL de `vendor/smartstock-infra/contracts/graphql/schema.graphql`, fijado al commit `6237ae7a047c3a16077db5bdd51a6ee89f5f90f1`. Inicializa el submódulo con `git submodule update --init --recursive`.
 
 ```sh
 (cd ../smartstock-infra && docker compose up --build -d gateway)

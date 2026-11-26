@@ -16,9 +16,13 @@ async (page) => {
         outcome: 'ACCEPTED', sale: { ...variables.input, status: 'CONFIRMED', rejectionReason: null },
       } } } });
     }
-    return route.fulfill({ json: { data: { sale: null } } });
+    const confirmed = inputs[1];
+    const sale = confirmed?.saleId === variables.id
+      ? { ...confirmed, status: 'CONFIRMED', rejectionReason: null }
+      : null;
+    return route.fulfill({ json: { data: { sale } } });
   });
-  await page.goto('http://localhost:5173/');
+  await page.goto('http://localhost:5173/#/ventas');
   await page.evaluate(() => localStorage.clear());
   await page.reload();
   const widths = [];
@@ -51,7 +55,11 @@ async (page) => {
   await page.screenshot({ path: 'evidence/redesign/venta-confirmada-390.png' });
   const mobile = await page.evaluate(() => ({ scroll: document.documentElement.scrollWidth, client: document.documentElement.clientWidth }));
   if (mobile.scroll > mobile.client) throw new Error(`Mobile result overflow: ${JSON.stringify(mobile)}`);
-  await page.getByRole('link', { name: 'Reposición y compras' }).click();
-  if (await page.evaluate(() => location.hash) !== '#reposicion') throw new Error('Navigation failed');
-  return { widths, mobile, keyboardFocus: focus, sameSaleInputAfterReload: true, stock, navigation: 'reposicion' };
+  await page.getByRole('link', { name: 'Consultar venta' }).click();
+  if (await page.evaluate(() => location.hash) !== '#consulta-venta') throw new Error('Navigation failed');
+  const lookup = page.getByRole('region', { name: 'Consultar una venta' });
+  await lookup.getByLabel('ID de venta').fill(inputs[0].saleId);
+  await lookup.getByRole('button', { name: 'Buscar venta' }).click();
+  await lookup.getByText('Venta confirmada.', { exact: true }).waitFor();
+  return { widths, mobile, keyboardFocus: focus, sameSaleInputAfterReload: true, stock, saleLookup: true };
 }

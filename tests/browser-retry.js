@@ -19,11 +19,12 @@ async (page) => {
     return route.fulfill({ json: { data: { sale: null } } });
   });
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto('http://localhost:5173/');
+  await page.goto('http://localhost:5173/#/ventas');
   await page.evaluate(() => localStorage.clear());
   await page.reload();
-  await page.keyboard.press('Tab');
-  await page.keyboard.press('Tab');
+  for (let step = 0; step < 12 && await page.evaluate(() => document.activeElement?.id) !== 'sku'; step++) {
+    await page.keyboard.press('Tab');
+  }
   const focus = await page.evaluate(() => document.activeElement?.id);
   if (focus !== 'sku') throw new Error(`Unexpected keyboard focus: ${focus}`);
   await page.keyboard.type('TEST');

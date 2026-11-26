@@ -18,7 +18,7 @@ async (page) => {
     return route.fulfill({ json: { data: { sale: null } } });
   });
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto('http://localhost:5173/');
+  await page.goto('http://localhost:5173/#/ventas');
   await page.evaluate(() => localStorage.clear());
   await page.reload();
   await page.getByLabel('SKU del producto').fill('TEST');

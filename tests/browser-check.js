@@ -24,7 +24,7 @@ async (page) => {
     }
     return route.fulfill({ json: { data: { sale: savedSale } } });
   });
-  await page.goto('http://localhost:5173/');
+  await page.goto('http://localhost:5173/#/ventas');
   await page.evaluate(() => localStorage.clear());
   await page.reload();
   const checks = [];
